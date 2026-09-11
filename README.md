@@ -36,7 +36,7 @@ The circuit board is populated on one side. The best way for soldering the `SMD`
 
 # Configuration
 
-To gain configure of the `ASA` can be set with the `RV2` trimmer. If the trimmer is not solderd the standard gain is around `~20`.
+The gain of the `ASA` can be set with the `RV2` trimmer. If the trimmer is not solderd the standard gain is around `~20`. If `R7` and `C11` is solder `bass boost` mode is enabled.
 
 # Additional Information
 
