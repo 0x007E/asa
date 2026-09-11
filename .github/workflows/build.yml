@@ -1,0 +1,44 @@
+name: ASA Build Pipeline
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  export-kicad:
+    env:
+      KICAD_BASE_FILENAME: "ASA"
+      KICAD_BASE_FOLDER: "./pcb"
+      KICAD_SCHEMATIC_FILE_EXTENSION: "kicad_sch"
+      KICAD_PCB_FILE_EXTENSION: "kicad_pcb"
+      KICAD_OUTPUT_FOLDER: "./output"
+      KIBOT_CONFIG_FILE: ".kibot/build.kibot.yaml"
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fetch repository
+      uses: actions/checkout@v7
+    
+    - name: Prepare output directory
+      run: |
+        mkdir -p ${{ env.KICAD_OUTPUT_FOLDER }}
+        cp -r ${{ env.KICAD_BASE_FOLDER }} ${{ env.KICAD_OUTPUT_FOLDER }}/kicad
+        cp ./LICENSE ${{ env.KICAD_OUTPUT_FOLDER }}
+
+    - name: Run KiBOT
+      uses: INTI-CMNB/KiBot@v2_k9
+      with:
+        config: ${{ env.KIBOT_CONFIG_FILE }}
+        dir: ${{ env.KICAD_OUTPUT_FOLDER }}
+        schema: "${{ env.KICAD_BASE_FOLDER }}/${{ env.KICAD_BASE_FILENAME }}.${{ env.KICAD_SCHEMATIC_FILE_EXTENSION }}"
+        board: "${{ env.KICAD_BASE_FOLDER }}/${{ env.KICAD_BASE_FILENAME }}.${{ env.KICAD_PCB_FILE_EXTENSION }}"
+
+    - name: Archive artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: kicad-export
+        path: ${{ env.KICAD_OUTPUT_FOLDER }}
+        retention-days: 1

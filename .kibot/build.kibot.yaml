@@ -1,0 +1,171 @@
+kibot:
+  version: 1
+
+globals:
+  # Filters for KiBot warnings
+  filters:
+    - filter: Ignore PcbDraw missing components
+      number: 103
+    - filter: Ignore missing KiCad config, not in docker images
+      number: 8
+    - filter: Ignore missing KiCad 3D models, not in docker images
+      number: 10
+    - filter: Ignore missing KiCad config from KiAuto, not in docker images
+      number: 58
+      regex: kicad_common.json
+  # This will undo the `set_text_variables` when we run it locally
+  restore_project: true
+  # We will use a value externally formatted
+  time_reformat: false
+
+preflight:
+  check_zone_fills: true
+  fill_zones: true
+
+  erc:
+    enabled: true
+  drc:
+    enabled: true
+    filters:
+      - filter: 'Silkscreen overlap'
+        error: 'silk_overlap'
+        regex: 'Silkscreen overlap'
+  
+  set_text_variables:
+    - name: 'date'
+      command: 'date +%d.%m.%Y'
+
+outputs:
+  - name: 'bom_xlsx'
+    comment: "Spreadsheet for the Bill of Materials"
+    type: bom
+    dir: './bom'
+    options: &bom_options
+      output: 'bom.%x'
+      xlsx:
+        datasheet_as_link: MFP
+        max_col_width: 40
+        highlight_empty: false
+      columns:
+        - Row
+        - References
+        - Value
+        - Footprint
+        - field: HTL
+          name: HTL
+        - Quantity Per PCB
+      normalize_values: true
+
+  - name: 'ibom'
+    comment: 'Interactive HTML BoM'
+    type: ibom
+    dir: './ibom'
+    options:
+      output: 'ibom.%x'
+      layer_view: 'FB'
+      bom_view: 'left-right'
+      # bom_view: 'top-bottom'
+      include_tracks: false
+      show_fields: 'Value,Footprint,HTL'
+
+  - name: 'print_sch'
+    comment: 'Schematic PDF'
+    type: pdf_sch_print
+    dir: './schematic'
+    options:
+      output: 'schematic.%x'
+      monochrome: true
+
+  - name: print_pcb
+    comment: 'PCB to PDF'
+    type: pcb_print
+    dir: './pcb'
+    options:
+      force_edge_cuts: true
+      keep_temporal_files: false
+      format: 'PDF'
+      output : 'pcb.%x'
+      plot_sheet_reference: true
+      scaling: 2.0
+      pages:
+        - layers:
+          - layer: F.Cu
+          sheet: '(Top Copper)'
+          mirror: false
+          monochrome: true
+        - layers:
+          - layer: F.Silkscreen
+          sheet: '(Top Silkscreen)'
+          mirror: false
+          monochrome: true
+        - layers:
+          - layer: B.Silkscreen
+          sheet: '(Bottom Silkscreen)'
+          mirror: false
+          monochrome: true
+          mirror: true
+        - layers: [ F.Fab, User.Drawings2 ]
+          sheet: '(Top Fabrication)'
+          mirror: false
+          monochrome: true
+        - layers: [ F.Silkscreen, User.Drawings ]
+          sheet: '(Top Drawings)'
+          mirror: false
+          monochrome: true
+
+  - name: 'gerbers'
+    comment: 'Gerber Files'
+    type: gerber
+    dir: './gerber'
+    layers:
+      - F.Cu
+      - B.Cu
+      - F.Adhesive
+      - B.Adhesive
+      - F.Paste
+      - B.Paste
+      - F.Silkscreen
+      - B.Silkscreen
+      - F.Mask
+      - B.Mask
+      - Edge.Cuts
+
+  - name: drill
+    comment: Drill files
+    type: excellon
+    dir: './drill'
+    options:
+      output: 'drill.%x'
+      map:
+        output: 'drill.%x'
+        type: pdf
+      pth_and_npth_single_file: true
+      
+  - name: mechanical
+    comment: "3D export (STEP)"
+    type: export_3d
+    dir: './step'
+    options:
+      format: 'step'
+      output: '%f-%i%I%v.%x'
+      download: true
+      no_virtual: true
+
+  # - name: board_top_filled
+  #   comment: "Top layer view with components"
+  #   type: pcbdraw
+  #   dir: './image'
+  #   options:
+  #     format: jpg
+  #     dpi: 300
+  #     show_components: all
+
+  # - name: board_bottom_filled
+  #   comment: "Bottom layer view with components"
+  #   type: pcbdraw
+  #   dir: './image'
+  #   options:
+  #     format: jpg
+  #     dpi: 300
+  #     bottom: true
+  #     show_components: all
