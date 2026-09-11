@@ -1,0 +1,113 @@
+name: ASA Release Pipeline
+
+env:
+  THUMBNAIL_WIDTH: 200
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  export-kicad:
+    env:
+      KICAD_BASE_FILENAME: "ASA"
+      KICAD_BASE_FOLDER: "./pcb"
+      KICAD_SCHEMATIC_FILE_EXTENSION: "kicad_sch"
+      KICAD_PCB_FILE_EXTENSION: "kicad_pcb"
+      KICAD_OUTPUT_FOLDER: "./output"
+      KIBOT_CONFIG_FILE: ".kibot/release.kibot.yaml"
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fetch repository
+      uses: actions/checkout@v7
+    
+    - name: Prepare output directory
+      run: |
+        mkdir -p ${{ env.KICAD_OUTPUT_FOLDER }}
+        cp -r ${{ env.KICAD_BASE_FOLDER }} ${{ env.KICAD_OUTPUT_FOLDER }}/kicad
+        cp ./LICENSE ${{ env.KICAD_OUTPUT_FOLDER }}
+
+    - name: Run KiBOT
+      uses: INTI-CMNB/KiBot@v2_k9
+      with:
+        config: ${{ env.KIBOT_CONFIG_FILE }}
+        dir: ${{ env.KICAD_OUTPUT_FOLDER }}
+        schema: "${{ env.KICAD_BASE_FOLDER }}/${{ env.KICAD_BASE_FILENAME }}.${{ env.KICAD_SCHEMATIC_FILE_EXTENSION }}"
+        board: "${{ env.KICAD_BASE_FOLDER }}/${{ env.KICAD_BASE_FILENAME }}.${{ env.KICAD_PCB_FILE_EXTENSION }}"
+
+    - name: Archive artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: kicad-export
+        path: ${{ env.KICAD_OUTPUT_FOLDER }}
+        retention-days: 1
+
+  create-release:
+    needs: [export-kicad]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Create Release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "Release ${{ github.ref_name }}" \
+            --notes "Release ${{ github.ref_name }}"
+
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Install ImageMagick
+        run: |
+            sudo apt-get update
+            sudo apt-get install -y imagemagick
+      
+      - name: Download KiCad Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: kicad-export
+          path: ./artifact/kicad
+      
+      - name: Display structure
+        run: ls -R ./artifact/kicad
+
+      - name: Create Compressed File
+        run: |
+          cd ./artifact
+          tar -czvf ./kicad.tar.gz ./kicad
+          zip -r ./kicad.zip ./kicad
+          cd ..
+
+      - name: Generate Thumbnails
+        run: |
+          mkdir -p thumbnails
+          convert ./artifact/kicad/blender/top.kicad.png -resize ${{ env.THUMBNAIL_WIDTH }}x ./thumbnails/top.kicad.thumbnail.png
+          convert ./artifact/kicad/blender/bottom.kicad.png -resize ${{ env.THUMBNAIL_WIDTH }}x ./thumbnails/bottom.kicad.thumbnail.png
+
+      - name: Upload KiCAD Files
+        run: |
+          gh release upload ${{ github.ref_name }} \
+            ./artifact/kicad/schematic/schematic.pdf \
+            ./artifact/kicad/pcb/pcb.pdf \
+            ./artifact/kicad/drill/drill.pdf \
+            ./artifact/kicad/bom/bom.xlsx \
+            ./artifact/kicad/ibom/ibom.html \
+            ./artifact/kicad.tar.gz \
+            ./artifact/kicad.zip \
+            ./artifact/kicad/blender/top.kicad.png \
+            ./artifact/kicad/blender/bottom.kicad.png \
+            ./thumbnails/top.kicad.thumbnail.png \
+            ./thumbnails/bottom.kicad.thumbnail.png
+      
+      - name: Rollback release on failure
+        if: failure()
+        run: |
+          gh release delete "${{ github.ref_name }}" -y --cleanup-tag
+          git push --delete origin "${{ github.ref_name }}" || true
